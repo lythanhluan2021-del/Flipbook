@@ -1,11 +1,12 @@
 /**
- * Flipbook Application Logic - Sử dụng Thư viện Lật Sách Canvas St.PageFlip Ban Đầu
- * Giữ nguyên hiệu ứng uốn cong, độ bóng chân thực và kéo góc trang mượt mà.
+ * Flipbook Logic - Giữ lại trang vừa lật bên trái sử dụng St.PageFlip Canvas Engine
+ * Đảm bảo 100% hiệu ứng uốn cong 3D, đổ bóng và kéo góc trang tuyệt đẹp của Page-Flip,
+ * đồng thời giữ lại trang vừa lật ở bên trái để đối chiếu trang trước - trang sau.
  */
 document.addEventListener('DOMContentLoaded', async () => {
   let pageFlip = null;
-  let bookData = null;
-  let currentPage = 0;
+  let rawBookData = null;
+  let currentSpread = 0;
   let zoomLevel = 1.0;
   let autoplayTimer = null;
 
@@ -95,35 +96,62 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
   }
 
-  // 2. Khởi tạo St.PageFlip ban đầu
+  // 2. Khởi tạo Flipbook với cơ chế phân bổ trang đối chiếu (Retained Spreads)
   function initFlipbook(data) {
-    bookData = data;
-    headerBookTitle.textContent = bookData.bookTitle || 'Sách Lật Điện Tử';
-    totalPagesLabel.textContent = bookData.pages.length;
+    rawBookData = data;
+    headerBookTitle.textContent = rawBookData.bookTitle || 'Sách Lật Điện Tử';
+    totalPagesLabel.textContent = rawBookData.pages.length;
 
     flipbookEl.innerHTML = '';
 
-    // Tạo các trang HTML bên trong sách
-    bookData.pages.forEach((page, index) => {
-      const pageDiv = document.createElement('div');
-      pageDiv.className = 'page';
-      pageDiv.setAttribute('data-density', index === 0 || index === bookData.pages.length - 1 ? 'hard' : 'soft');
+    const pages = rawBookData.pages;
+    const totalLessons = pages.length;
 
-      const img = document.createElement('img');
-      img.src = page.image;
-      img.alt = page.title || `Trang ${page.pageNumber}`;
-      img.loading = index < 4 ? 'eager' : 'lazy';
+    // Xây dựng danh sách cặp trang (Spreads):
+    // Cặp 0: [Bài 1, Bài 2]
+    // Cặp 1: [Bài 2, Bài 3] -> Bài 2 được giữ lại ở bên trái!
+    // Cặp 2: [Bài 3, Bài 4] -> Bài 3 được giữ lại ở bên trái!
+    // ...
+    // Cặp n: [Bài n-1, Bài n]
+    const spreads = [];
+    for (let i = 0; i < totalLessons - 1; i++) {
+      spreads.push({
+        leftLesson: pages[i],
+        rightLesson: pages[i + 1]
+      });
+    }
 
-      pageDiv.appendChild(img);
-      flipbookEl.appendChild(pageDiv);
+    // Tạo các phần tử DOM cho St.PageFlip
+    spreads.forEach((spread, spreadIdx) => {
+      // Trang trái của cặp
+      const pageLeftEl = document.createElement('div');
+      pageLeftEl.className = 'page page-left';
+      pageLeftEl.setAttribute('data-density', 'soft');
+      const imgL = document.createElement('img');
+      imgL.src = spread.leftLesson.image;
+      imgL.alt = spread.leftLesson.title;
+      imgL.loading = spreadIdx === 0 ? 'eager' : 'lazy';
+      pageLeftEl.appendChild(imgL);
+      flipbookEl.appendChild(pageLeftEl);
+
+      // Trang phải của cặp
+      const pageRightEl = document.createElement('div');
+      pageRightEl.className = 'page page-right';
+      pageRightEl.setAttribute('data-density', 'soft');
+      const imgR = document.createElement('img');
+      imgR.src = spread.rightLesson.image;
+      imgR.alt = spread.rightLesson.title;
+      imgR.loading = spreadIdx === 0 ? 'eager' : 'lazy';
+      pageRightEl.appendChild(imgR);
+      flipbookEl.appendChild(pageRightEl);
     });
 
-    // Kích thước chuẩn tỉ lệ ảnh bài học (~940x1672)
+    // Kích thước chuẩn
     const vWidth = readerContainer.clientWidth;
     const vHeight = readerContainer.clientHeight;
     const targetRatio = 940 / 1672;
 
-    let pageHeight = Math.min(vHeight * 0.88, 800);
+    let pageHeight = Math.min(vHeight * 0.88, 780);
     let pageWidth = Math.round(pageHeight * targetRatio);
 
     if (vWidth < 768) {
@@ -135,7 +163,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       pageFlip.destroy();
     }
 
-    // Cấu hình Engine PageFlip với hiệu ứng Canvas ban đầu
+    // Khởi tạo engine St.PageFlip
     pageFlip = new St.PageFlip(flipbookEl, {
       width: pageWidth,
       height: pageHeight,
@@ -145,7 +173,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       minHeight: 450,
       maxHeight: 1400,
       maxShadowOpacity: 0.6,
-      showCover: false, // Mở ra hiển thị 2 trang đôi ngay từ trang đầu
+      showCover: false, // Mở luôn 2 trang đôi
       mobileScrollSupport: false,
       useMouseEvents: true,
       usePortrait: true,
@@ -157,63 +185,73 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Bắt sự kiện lật trang
     pageFlip.on('flip', (e) => {
-      currentPage = e.data;
-      onPageChanged(currentPage);
+      // e.data là pageIndex của trang đầu tiên trong cặp (0, 2, 4, 6...)
+      currentSpread = Math.floor(e.data / 2);
+      onSpreadChanged(currentSpread, spreads);
       window.flipSound.play();
     });
 
     pageFlip.on('init', () => {
-      onPageChanged(0);
+      onSpreadChanged(0, spreads);
     });
 
-    renderTOC();
-    renderThumbnails();
+    renderTOC(spreads);
+    renderThumbnails(spreads);
   }
 
-  function onPageChanged(index) {
-    const pageNum = index + 1;
-    pageNumberInput.value = pageNum;
+  function onSpreadChanged(sIndex, spreads) {
+    if (!spreads || !spreads[sIndex]) return;
 
-    if (bookData && bookData.pages[index]) {
-      const p1 = bookData.pages[index];
-      const p2 = bookData.pages[index + 1];
-      if (p2 && pageFlip && pageFlip.getOrientation() === 'landscape') {
-        headerCurrentLesson.textContent = `Trang ${p1.pageNumber}: ${p1.title}  ✦  Trang ${p2.pageNumber}: ${p2.title}`;
-      } else {
-        headerCurrentLesson.textContent = `Trang ${p1.pageNumber}: ${p1.title}`;
-      }
-    }
+    const current = spreads[sIndex];
+    const leftLesson = current.leftLesson;
+    const rightLesson = current.rightLesson;
 
-    arrowPrev.disabled = index === 0;
-    btnPrevPage.disabled = index === 0;
-    btnFirstPage.disabled = index === 0;
+    // Cập nhật nhãn trang trên footer
+    pageNumberInput.value = `${leftLesson.pageNumber} - ${rightLesson.pageNumber}`;
 
-    const isLast = index >= bookData.pages.length - 1;
+    // Cập nhật tiêu đề bài học trên Header
+    headerCurrentLesson.textContent = `Trang trước: Trang ${leftLesson.pageNumber} (${leftLesson.title})  ✦  Trang sau: Trang ${rightLesson.pageNumber} (${rightLesson.title})`;
+
+    // Trạng thái nút
+    arrowPrev.disabled = sIndex === 0;
+    btnPrevPage.disabled = sIndex === 0;
+    btnFirstPage.disabled = sIndex === 0;
+
+    const isLast = sIndex >= spreads.length - 1;
     arrowNext.disabled = isLast;
     btnNextPage.disabled = isLast;
     btnLastPage.disabled = isLast;
 
+    // Highlight trong Mục lục & Thumbnails
     document.querySelectorAll('.toc-item').forEach((item, idx) => {
-      item.classList.toggle('active', idx === index || (idx === index + 1 && pageFlip && pageFlip.getOrientation() === 'landscape'));
+      const isLeft = idx === leftLesson.pageNumber - 1;
+      const isRight = idx === rightLesson.pageNumber - 1;
+      item.classList.toggle('active', isLeft || isRight);
     });
 
     document.querySelectorAll('.thumb-card').forEach((item, idx) => {
-      item.classList.toggle('active', idx === index || (idx === index + 1 && pageFlip && pageFlip.getOrientation() === 'landscape'));
+      const isLeft = idx === leftLesson.pageNumber - 1;
+      const isRight = idx === rightLesson.pageNumber - 1;
+      item.classList.toggle('active', isLeft || isRight);
     });
   }
 
-  // 3. Mục lục
-  function renderTOC() {
+  // 3. Mục lục (Table of Contents)
+  function renderTOC(spreads) {
     tocList.innerHTML = '';
-    bookData.pages.forEach((page, index) => {
+    rawBookData.pages.forEach((page, index) => {
       const item = document.createElement('div');
-      item.className = 'toc-item' + (index === currentPage ? ' active' : '');
+      item.className = 'toc-item' + (index === 0 || index === 1 ? ' active' : '');
       item.innerHTML = `
         <span class="toc-num">${index + 1}</span>
         <span class="toc-text">${page.title}</span>
       `;
       item.addEventListener('click', () => {
-        pageFlip.flip(index);
+        // Nhảy đến cặp trang tương ứng
+        let targetSpread = Math.min(index, spreads.length - 1);
+        if (pageFlip) {
+          pageFlip.flip(targetSpread * 2);
+        }
         tocDrawer.classList.remove('open');
         btnToc.classList.remove('active');
       });
@@ -221,18 +259,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 4. Thumbnails
-  function renderThumbnails() {
+  // 4. Khay trang thu nhỏ (Thumbnails)
+  function renderThumbnails(spreads) {
     thumbsTray.innerHTML = '';
-    bookData.pages.forEach((page, index) => {
+    rawBookData.pages.forEach((page, index) => {
       const card = document.createElement('div');
-      card.className = 'thumb-card' + (index === currentPage ? ' active' : '');
+      card.className = 'thumb-card' + (index === 0 || index === 1 ? ' active' : '');
       card.innerHTML = `
         <img src="${page.image}" alt="Trang ${index + 1}">
         <span>Trang ${index + 1}</span>
       `;
       card.addEventListener('click', () => {
-        pageFlip.flip(index);
+        let targetSpread = Math.min(index, spreads.length - 1);
+        if (pageFlip) {
+          pageFlip.flip(targetSpread * 2);
+        }
       });
       thumbsTray.appendChild(card);
     });
@@ -245,15 +286,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   btnNextPage.addEventListener('click', () => pageFlip && pageFlip.flipNext());
 
   btnFirstPage.addEventListener('click', () => pageFlip && pageFlip.flip(0));
-  btnLastPage.addEventListener('click', () => pageFlip && pageFlip.flip(bookData.pages.length - 1));
+  btnLastPage.addEventListener('click', () => {
+    if (pageFlip && rawBookData) {
+      const maxSpread = rawBookData.pages.length - 2;
+      pageFlip.flip(maxSpread * 2);
+    }
+  });
 
   pageNumberInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       let num = parseInt(pageNumberInput.value, 10);
-      if (!isNaN(num) && num >= 1 && num <= bookData.pages.length) {
-        pageFlip.flip(num - 1);
-      } else {
-        pageNumberInput.value = currentPage + 1;
+      if (!isNaN(num) && num >= 1 && num <= rawBookData.pages.length) {
+        let s = Math.min(num - 1, rawBookData.pages.length - 2);
+        pageFlip.flip(s * 2);
       }
     }
   });
@@ -279,8 +324,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
       btnAutoplay.classList.add('active');
       autoplayTimer = setInterval(() => {
-        if (!pageFlip) return;
-        if (currentPage >= bookData.pages.length - 1) {
+        if (!pageFlip || !rawBookData) return;
+        const maxSpread = rawBookData.pages.length - 2;
+        if (currentSpread >= maxSpread) {
           pageFlip.flip(0);
         } else {
           pageFlip.flipNext();
@@ -396,7 +442,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else if (e.key === 'Home') {
       pageFlip && pageFlip.flip(0);
     } else if (e.key === 'End') {
-      pageFlip && pageFlip.flip(bookData.pages.length - 1);
+      if (pageFlip && rawBookData) {
+        pageFlip.flip((rawBookData.pages.length - 2) * 2);
+      }
     } else if (e.key.toLowerCase() === 'm') {
       btnSound.click();
     } else if (e.key.toLowerCase() === 'f') {
@@ -411,7 +459,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Mở khóa âm thanh khi người dùng bấm chuột lần đầu
+  // Mở khóa âm thanh khi tương tác lần đầu
   const unlockAudio = () => {
     window.flipSound.init();
     window.removeEventListener('click', unlockAudio);
