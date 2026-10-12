@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Sách Lật Điện Tử - Tin Học Ứng Dụng 12 (Trang Trước & Sau)</title>
+  <title>Sách Lật Điện Tử - Tin Học Ứng Dụng 12</title>
   <link rel="stylesheet" href="style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📖</text></svg>">
 </head>
@@ -15,19 +15,8 @@
       <span class="book-badge">Tin Học 12</span>
       <div class="book-title-group">
         <h1 id="headerBookTitle">Tin Học Ứng Dụng 12 - Kết Nối Tri Thức</h1>
-        <p id="headerCurrentLesson">Trang 1: Làm quen với trí tuệ nhân tạo  &bull;  Trang 2: Trí tuệ nhân tạo trong đời sống</p>
+        <p id="headerCurrentLesson">Bài 1: Làm quen với trí tuệ nhân tạo</p>
       </div>
-    </div>
-
-    <!-- Mode Selector in Header -->
-    <div class="mode-selector-pill hide-mobile">
-      <button class="mode-btn active" id="modeRetain" title="Lật từng trang - Giữ lại trang vừa lật bên trái để theo dõi">
-        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
-        <span>Giữ trang vừa lật (Trước - Sau)</span>
-      </button>
-      <button class="mode-btn" id="modeSpread" title="Lật theo cặp 2 trang">
-        <span>Lật 2 trang</span>
-      </button>
     </div>
 
     <div class="header-actions">
@@ -67,58 +56,9 @@
       <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
     </button>
 
-    <!-- Flipbook Stage (Hỗ trợ 3D Flip và Giữ Trang Vừa Lật) -->
+    <!-- Flipbook Stage (Canvas Page-Flip ban đầu) -->
     <div class="flipbook-stage" id="flipbookStage">
-      <div class="custom-book-wrapper" id="customBook">
-        <!-- Vỏ sách & hiệu ứng bìa ngoài -->
-        <div class="book-cover-frame">
-          
-          <!-- TRANG BÊN TRÁI (Trang trước / Trang vừa lật) -->
-          <div class="book-half book-half-left" id="pageLeft">
-            <div class="page-content-wrapper">
-              <img id="imgLeft" src="" alt="Trang trước">
-              <div class="page-corner-hint corner-left" title="Bấm để lùi trang"></div>
-              <div class="page-spine-shadow spine-left"></div>
-              <div class="page-tag-badge tag-left">
-                <span class="badge-dot"></span>
-                <span id="badgeTextLeft">Trang 1: Làm quen với AI</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- TẤM LẬT 3D ĐỘNG (Lật mượt mà từ phải sang trái hoặc ngược lại) -->
-          <div class="flipper-leaf" id="flipperLeaf">
-            <!-- Mặt trước (Hướng về người xem khi ở bên phải) -->
-            <div class="flipper-side flipper-side-front">
-              <img id="imgFlipperFront" src="" alt="">
-              <div class="flipper-lighting" id="flipperLightingFront"></div>
-              <div class="page-spine-shadow spine-right"></div>
-            </div>
-            <!-- Mặt sau (Hiển thị khi đã lật qua bên trái) -->
-            <div class="flipper-side flipper-side-back">
-              <img id="imgFlipperBack" src="" alt="">
-              <div class="flipper-lighting" id="flipperLightingBack"></div>
-              <div class="page-spine-shadow spine-left"></div>
-            </div>
-          </div>
-
-          <!-- TRANG BÊN PHẢI (Trang sau / Trang kế tiếp) -->
-          <div class="book-half book-half-right" id="pageRight">
-            <div class="page-content-wrapper">
-              <img id="imgRight" src="" alt="Trang sau">
-              <div class="page-corner-hint corner-right" title="Bấm để lật trang tiếp"></div>
-              <div class="page-spine-shadow spine-right"></div>
-              <div class="page-tag-badge tag-right">
-                <span class="badge-dot"></span>
-                <span id="badgeTextRight">Trang 2: AI trong đời sống</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Gáy sách trung tâm -->
-          <div class="book-center-spine"></div>
-        </div>
-      </div>
+      <div id="flipbook"></div>
     </div>
 
     <button class="nav-arrow next" id="arrowNext" title="Trang kế (Phím mũi tên phải)">
@@ -130,7 +70,7 @@
   <footer class="bottom-bar">
     <div class="controls-group">
       <!-- Về trang đầu -->
-      <button class="btn-icon" id="btnFirstPage" title="Về trang đầu (Home)">
+      <button class="btn-icon" id="btnFirstPage" title="Trang đầu (Home)">
         <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
       </button>
 
@@ -141,8 +81,9 @@
 
       <!-- Chỉ số trang -->
       <div class="page-indicator-box">
-        <span class="page-tag-label" id="pagePairLabel">Trang 1 &bull; 2</span>
-        <span class="page-sep">/</span>
+        <span>Trang</span>
+        <input type="text" id="pageNumberInput" value="1" title="Nhập số trang và nhấn Enter">
+        <span>/</span>
         <span id="totalPagesLabel">8</span>
       </div>
 
@@ -152,7 +93,7 @@
       </button>
 
       <!-- Đến trang cuối -->
-      <button class="btn-icon" id="btnLastPage" title="Đến trang cuối (End)">
+      <button class="btn-icon" id="btnLastPage" title="Trang cuối (End)">
         <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
       </button>
     </div>
@@ -231,7 +172,8 @@
     </div>
   </div>
 
-  <!-- Audio Synthesizer & App Logic -->
+  <!-- Thư viện PageFlip ban đầu & Audio & Logic -->
+  <script src="lib/page-flip.browser.js"></script>
   <script src="sound.js"></script>
   <script src="app.js"></script>
 </body>

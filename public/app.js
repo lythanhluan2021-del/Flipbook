@@ -1,37 +1,24 @@
 /**
- * Flipbook Logic - Chế độ Giữ Trang Vừa Lật (Dual Sync Retained View)
- * Khi lật trang: Trang vừa lật được giữ lại bên trái, trang mới mở ra bên phải.
+ * Flipbook Application Logic - Sử dụng Thư viện Lật Sách Canvas St.PageFlip Ban Đầu
+ * Giữ nguyên hiệu ứng uốn cong, độ bóng chân thực và kéo góc trang mượt mà.
  */
 document.addEventListener('DOMContentLoaded', async () => {
+  let pageFlip = null;
   let bookData = null;
-  let leftIndex = 0;
-  let rightIndex = 1;
-  let isAnimating = false;
+  let currentPage = 0;
   let zoomLevel = 1.0;
   let autoplayTimer = null;
-  let currentMode = 'retain'; // 'retain' (giữ trang vừa lật) hoặc 'spread' (lật 2 trang)
 
   // DOM Elements
-  const headerBookTitle = document.getElementById('headerBookTitle');
-  const headerCurrentLesson = document.getElementById('headerCurrentLesson');
-  const pagePairLabel = document.getElementById('pagePairLabel');
-  const totalPagesLabel = document.getElementById('totalPagesLabel');
-
-  const pageLeft = document.getElementById('pageLeft');
-  const pageRight = document.getElementById('pageRight');
-  const imgLeft = document.getElementById('imgLeft');
-  const imgRight = document.getElementById('imgRight');
-  const badgeTextLeft = document.getElementById('badgeTextLeft');
-  const badgeTextRight = document.getElementById('badgeTextRight');
-
-  const flipperLeaf = document.getElementById('flipperLeaf');
-  const imgFlipperFront = document.getElementById('imgFlipperFront');
-  const imgFlipperBack = document.getElementById('imgFlipperBack');
-
+  const flipbookEl = document.getElementById('flipbook');
   const flipbookStage = document.getElementById('flipbookStage');
   const readerContainer = document.getElementById('readerContainer');
+  const headerBookTitle = document.getElementById('headerBookTitle');
+  const headerCurrentLesson = document.getElementById('headerCurrentLesson');
+  const pageNumberInput = document.getElementById('pageNumberInput');
+  const totalPagesLabel = document.getElementById('totalPagesLabel');
 
-  // Nav Arrows & Controls
+  // Controls
   const arrowPrev = document.getElementById('arrowPrev');
   const arrowNext = document.getElementById('arrowNext');
   const btnPrevPage = document.getElementById('btnPrevPage');
@@ -64,9 +51,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnConfirmSync = document.getElementById('btnConfirmSync');
   const btnResetLocalData = document.getElementById('btnResetLocalData');
 
-  const modeRetain = document.getElementById('modeRetain');
-  const modeSpread = document.getElementById('modeSpread');
-
   // 1. Nạp dữ liệu sách
   async function loadBookData() {
     const savedDriveUrl = localStorage.getItem('flipbook_drive_api');
@@ -95,7 +79,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.warn('Lỗi đọc books-data.json:', e);
     }
 
-    // Dữ liệu dự phòng
     return {
       bookTitle: 'TIN HỌC ỨNG DỤNG 12 - KẾT NỐI TRI THỨC',
       totalPages: 8,
@@ -112,252 +95,170 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
   }
 
-  // 2. Khởi tạo & Cập nhật giao diện sách
-  function initBook(data) {
+  // 2. Khởi tạo St.PageFlip ban đầu
+  function initFlipbook(data) {
     bookData = data;
     headerBookTitle.textContent = bookData.bookTitle || 'Sách Lật Điện Tử';
     totalPagesLabel.textContent = bookData.pages.length;
 
-    leftIndex = 0;
-    rightIndex = Math.min(1, bookData.pages.length - 1);
+    flipbookEl.innerHTML = '';
 
-    updateStaticDisplay();
+    // Tạo các trang HTML bên trong sách
+    bookData.pages.forEach((page, index) => {
+      const pageDiv = document.createElement('div');
+      pageDiv.className = 'page';
+      pageDiv.setAttribute('data-density', index === 0 || index === bookData.pages.length - 1 ? 'hard' : 'soft');
+
+      const img = document.createElement('img');
+      img.src = page.image;
+      img.alt = page.title || `Trang ${page.pageNumber}`;
+      img.loading = index < 4 ? 'eager' : 'lazy';
+
+      pageDiv.appendChild(img);
+      flipbookEl.appendChild(pageDiv);
+    });
+
+    // Kích thước chuẩn tỉ lệ ảnh bài học (~940x1672)
+    const vWidth = readerContainer.clientWidth;
+    const vHeight = readerContainer.clientHeight;
+    const targetRatio = 940 / 1672;
+
+    let pageHeight = Math.min(vHeight * 0.88, 800);
+    let pageWidth = Math.round(pageHeight * targetRatio);
+
+    if (vWidth < 768) {
+      pageWidth = Math.min(vWidth * 0.9, 440);
+      pageHeight = Math.round(pageWidth / targetRatio);
+    }
+
+    if (pageFlip) {
+      pageFlip.destroy();
+    }
+
+    // Cấu hình Engine PageFlip với hiệu ứng Canvas ban đầu
+    pageFlip = new St.PageFlip(flipbookEl, {
+      width: pageWidth,
+      height: pageHeight,
+      size: 'stretch',
+      minWidth: 260,
+      maxWidth: 900,
+      minHeight: 450,
+      maxHeight: 1400,
+      maxShadowOpacity: 0.6,
+      showCover: false, // Mở ra hiển thị 2 trang đôi ngay từ trang đầu
+      mobileScrollSupport: false,
+      useMouseEvents: true,
+      usePortrait: true,
+      autoSize: true,
+      flippingTime: 700
+    });
+
+    pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+
+    // Bắt sự kiện lật trang
+    pageFlip.on('flip', (e) => {
+      currentPage = e.data;
+      onPageChanged(currentPage);
+      window.flipSound.play();
+    });
+
+    pageFlip.on('init', () => {
+      onPageChanged(0);
+    });
+
     renderTOC();
     renderThumbnails();
   }
 
-  function updateStaticDisplay() {
-    const total = bookData.pages.length;
-    const pLeft = bookData.pages[leftIndex];
-    const pRight = bookData.pages[rightIndex];
+  function onPageChanged(index) {
+    const pageNum = index + 1;
+    pageNumberInput.value = pageNum;
 
-    if (pLeft) {
-      imgLeft.src = pLeft.image;
-      badgeTextLeft.textContent = `Trang trước: Trang ${pLeft.pageNumber} (${pLeft.title})`;
+    if (bookData && bookData.pages[index]) {
+      const p1 = bookData.pages[index];
+      const p2 = bookData.pages[index + 1];
+      if (p2 && pageFlip && pageFlip.getOrientation() === 'landscape') {
+        headerCurrentLesson.textContent = `Trang ${p1.pageNumber}: ${p1.title}  ✦  Trang ${p2.pageNumber}: ${p2.title}`;
+      } else {
+        headerCurrentLesson.textContent = `Trang ${p1.pageNumber}: ${p1.title}`;
+      }
     }
 
-    if (pRight && rightIndex < total && rightIndex !== leftIndex) {
-      pageRight.style.display = 'block';
-      imgRight.src = pRight.image;
-      badgeTextRight.textContent = `Trang sau: Trang ${pRight.pageNumber} (${pRight.title})`;
-    } else {
-      // Trường hợp chỉ còn 1 trang lẻ cuối cùng
-      pageRight.style.display = 'none';
-    }
+    arrowPrev.disabled = index === 0;
+    btnPrevPage.disabled = index === 0;
+    btnFirstPage.disabled = index === 0;
 
-    // Cập nhật nhãn trang trên footer
-    if (pageRight.style.display !== 'none') {
-      pagePairLabel.textContent = `Trang ${pLeft.pageNumber} • ${pRight.pageNumber}`;
-      headerCurrentLesson.textContent = `Trang ${pLeft.pageNumber}: ${pLeft.title}  ✦  Trang ${pRight.pageNumber}: ${pRight.title}`;
-    } else {
-      pagePairLabel.textContent = `Trang ${pLeft.pageNumber}`;
-      headerCurrentLesson.textContent = `Trang ${pLeft.pageNumber}: ${pLeft.title}`;
-    }
+    const isLast = index >= bookData.pages.length - 1;
+    arrowNext.disabled = isLast;
+    btnNextPage.disabled = isLast;
+    btnLastPage.disabled = isLast;
 
-    // Điều khiển trạng thái nút
-    const canGoPrev = leftIndex > 0;
-    const canGoNext = rightIndex < total - 1;
-
-    arrowPrev.disabled = !canGoPrev;
-    btnPrevPage.disabled = !canGoPrev;
-    btnFirstPage.disabled = !canGoPrev;
-
-    arrowNext.disabled = !canGoNext;
-    btnNextPage.disabled = !canGoNext;
-    btnLastPage.disabled = !canGoNext;
-
-    // Cập nhật Mục lục & Thumbnails
-    updateActiveSidebarItems();
-  }
-
-  function updateActiveSidebarItems() {
     document.querySelectorAll('.toc-item').forEach((item, idx) => {
-      item.classList.remove('active-left', 'active-right');
-      if (idx === leftIndex) item.classList.add('active-left');
-      if (idx === rightIndex && pageRight.style.display !== 'none') item.classList.add('active-right');
+      item.classList.toggle('active', idx === index || (idx === index + 1 && pageFlip && pageFlip.getOrientation() === 'landscape'));
     });
 
     document.querySelectorAll('.thumb-card').forEach((item, idx) => {
-      item.classList.remove('active-left', 'active-right');
-      if (idx === leftIndex) item.classList.add('active-left');
-      if (idx === rightIndex && pageRight.style.display !== 'none') item.classList.add('active-right');
+      item.classList.toggle('active', idx === index || (idx === index + 1 && pageFlip && pageFlip.getOrientation() === 'landscape'));
     });
   }
 
-  // 3. Hoạt ảnh Lật tiến (Flip Next: Lật trang phải sang trái và GIỮ LẠI nó ở bên trái!)
-  function flipNext() {
-    if (isAnimating) return;
-    const total = bookData.pages.length;
-    if (rightIndex >= total - 1) return; // Đã ở trang cuối
-
-    isAnimating = true;
-
-    const oldLeft = leftIndex;
-    const oldRight = rightIndex;
-
-    // Mục tiêu mới
-    let nextLeft, nextRight;
-    if (currentMode === 'retain') {
-      // CHẾ ĐỘ GIỮ LẠI TRANG VỪA LẬT:
-      // Trang vừa lật (oldRight) chuyển sang nằm ở bên trái!
-      // Trang mới (oldRight + 1) hiện ra ở bên phải!
-      nextLeft = oldRight;
-      nextRight = oldRight + 1;
-    } else {
-      // Chế độ 2 trang truyền thống
-      nextLeft = Math.min(oldLeft + 2, total - 2);
-      nextRight = nextLeft + 1;
-    }
-
-    // 1. Chuẩn bị ảnh cho tấm lật 3D (Flipper Leaf)
-    imgFlipperFront.src = bookData.pages[oldRight].image; // Mặt úp xuống khi đang ở bên phải
-    imgFlipperBack.src = bookData.pages[oldRight].image;  // Mặt ngửa lên khi lật sang bên trái (chính là trang vừa lật!)
-
-    // 2. Chuẩn bị trang bên phải bên dưới tấm lật sẵn sàng nhận trang mới tiếp theo
-    if (nextRight < total) {
-      pageRight.style.display = 'block';
-      imgRight.src = bookData.pages[nextRight].image;
-      badgeTextRight.textContent = `Trang sau: Trang ${bookData.pages[nextRight].pageNumber} (${bookData.pages[nextRight].title})`;
-    }
-
-    // 3. Bật âm thanh lật sách chân thực
-    window.flipSound.play();
-
-    // 4. Kích hoạt hoạt ảnh CSS 3D
-    flipperLeaf.className = 'flipper-leaf flipping-next';
-
-    // 5. Kết thúc hoạt ảnh sau 650ms
-    setTimeout(() => {
-      leftIndex = nextLeft;
-      rightIndex = nextRight;
-
-      flipperLeaf.className = 'flipper-leaf'; // Reset flipper
-      updateStaticDisplay();
-      isAnimating = false;
-    }, 650);
-  }
-
-  // 4. Hoạt ảnh Lật lùi (Flip Prev: Lật ngược từ trái sang phải)
-  function flipPrev() {
-    if (isAnimating) return;
-    if (leftIndex <= 0) return; // Đã ở trang đầu
-
-    isAnimating = true;
-
-    const oldLeft = leftIndex;
-    const oldRight = rightIndex;
-
-    let prevLeft, prevRight;
-    if (currentMode === 'retain') {
-      // CHẾ ĐỘ GIỮ LẠI: Lùi 1 trang
-      prevLeft = oldLeft - 1;
-      prevRight = oldLeft;
-    } else {
-      // Chế độ 2 trang truyền thống
-      prevLeft = Math.max(0, oldLeft - 2);
-      prevRight = prevLeft + 1;
-    }
-
-    // 1. Chuẩn bị ảnh tấm lật (từ bên trái lật ngược về phải)
-    imgFlipperBack.src = bookData.pages[oldLeft].image;
-    imgFlipperFront.src = bookData.pages[oldLeft].image;
-
-    // 2. Chuẩn bị trang bên trái bên dưới để đón nhận trang trước đó
-    imgLeft.src = bookData.pages[prevLeft].image;
-    badgeTextLeft.textContent = `Trang trước: Trang ${bookData.pages[prevLeft].pageNumber} (${bookData.pages[prevLeft].title})`;
-
-    // 3. Bật âm thanh lật giấy
-    window.flipSound.play();
-
-    // 4. Kích hoạt hiệu ứng lật lùi 3D
-    flipperLeaf.className = 'flipper-leaf flipping-prev';
-
-    // 5. Kết thúc hoạt ảnh
-    setTimeout(() => {
-      leftIndex = prevLeft;
-      rightIndex = prevRight;
-
-      flipperLeaf.className = 'flipper-leaf';
-      updateStaticDisplay();
-      isAnimating = false;
-    }, 650);
-  }
-
-  // 5. Nhảy thẳng đến trang bất kỳ
-  function jumpToPage(targetIdx) {
-    if (isAnimating) return;
-    const total = bookData.pages.length;
-    targetIdx = Math.max(0, Math.min(targetIdx, total - 1));
-
-    if (currentMode === 'retain') {
-      if (targetIdx === total - 1) {
-        leftIndex = Math.max(0, total - 2);
-        rightIndex = total - 1;
-      } else {
-        leftIndex = targetIdx;
-        rightIndex = Math.min(targetIdx + 1, total - 1);
-      }
-    } else {
-      leftIndex = Math.floor(targetIdx / 2) * 2;
-      rightIndex = Math.min(leftIndex + 1, total - 1);
-    }
-
-    window.flipSound.play();
-    updateStaticDisplay();
-  }
-
-  // 6. Mục lục (Table of Contents)
+  // 3. Mục lục
   function renderTOC() {
     tocList.innerHTML = '';
     bookData.pages.forEach((page, index) => {
       const item = document.createElement('div');
-      item.className = 'toc-item';
+      item.className = 'toc-item' + (index === currentPage ? ' active' : '');
       item.innerHTML = `
         <span class="toc-num">${index + 1}</span>
         <span class="toc-text">${page.title}</span>
       `;
       item.addEventListener('click', () => {
-        jumpToPage(index);
+        pageFlip.flip(index);
         tocDrawer.classList.remove('open');
         btnToc.classList.remove('active');
       });
       tocList.appendChild(item);
     });
-    updateActiveSidebarItems();
   }
 
-  // 7. Khay ảnh thu nhỏ (Thumbnails)
+  // 4. Thumbnails
   function renderThumbnails() {
     thumbsTray.innerHTML = '';
     bookData.pages.forEach((page, index) => {
       const card = document.createElement('div');
-      card.className = 'thumb-card';
+      card.className = 'thumb-card' + (index === currentPage ? ' active' : '');
       card.innerHTML = `
         <img src="${page.image}" alt="Trang ${index + 1}">
         <span>Trang ${index + 1}</span>
       `;
       card.addEventListener('click', () => {
-        jumpToPage(index);
+        pageFlip.flip(index);
       });
       thumbsTray.appendChild(card);
     });
-    updateActiveSidebarItems();
   }
 
-  // 8. Tương tác trực tiếp trên mặt trang sách
-  pageRight.addEventListener('click', flipNext);
-  pageLeft.addEventListener('click', flipPrev);
+  // 5. Nút điều hướng
+  arrowPrev.addEventListener('click', () => pageFlip && pageFlip.flipPrev());
+  btnPrevPage.addEventListener('click', () => pageFlip && pageFlip.flipPrev());
+  arrowNext.addEventListener('click', () => pageFlip && pageFlip.flipNext());
+  btnNextPage.addEventListener('click', () => pageFlip && pageFlip.flipNext());
 
-  arrowNext.addEventListener('click', flipNext);
-  btnNextPage.addEventListener('click', flipNext);
+  btnFirstPage.addEventListener('click', () => pageFlip && pageFlip.flip(0));
+  btnLastPage.addEventListener('click', () => pageFlip && pageFlip.flip(bookData.pages.length - 1));
 
-  arrowPrev.addEventListener('click', flipPrev);
-  btnPrevPage.addEventListener('click', flipPrev);
+  pageNumberInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      let num = parseInt(pageNumberInput.value, 10);
+      if (!isNaN(num) && num >= 1 && num <= bookData.pages.length) {
+        pageFlip.flip(num - 1);
+      } else {
+        pageNumberInput.value = currentPage + 1;
+      }
+    }
+  });
 
-  btnFirstPage.addEventListener('click', () => jumpToPage(0));
-  btnLastPage.addEventListener('click', () => jumpToPage(bookData.pages.length - 1));
-
-  // 9. Zoom controls
+  // 6. Phóng to / Thu nhỏ
   function applyZoom(delta) {
     if (delta === 0) zoomLevel = 1.0;
     else zoomLevel = Math.min(Math.max(zoomLevel + delta, 0.75), 2.2);
@@ -369,22 +270,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   btnZoomOut.addEventListener('click', () => applyZoom(-0.2));
   btnZoomReset.addEventListener('click', () => applyZoom(0));
 
-  // 10. Chuyển đổi chế độ (Mode Switching)
-  modeRetain.addEventListener('click', () => {
-    currentMode = 'retain';
-    modeRetain.classList.add('active');
-    modeSpread.classList.remove('active');
-    updateStaticDisplay();
-  });
-
-  modeSpread.addEventListener('click', () => {
-    currentMode = 'spread';
-    modeSpread.classList.add('active');
-    modeRetain.classList.remove('active');
-    jumpToPage(leftIndex);
-  });
-
-  // 11. Autoplay Slideshow
+  // 7. Autoplay Slideshow
   btnAutoplay.addEventListener('click', () => {
     if (autoplayTimer) {
       clearInterval(autoplayTimer);
@@ -393,16 +279,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
       btnAutoplay.classList.add('active');
       autoplayTimer = setInterval(() => {
-        if (rightIndex >= bookData.pages.length - 1) {
-          jumpToPage(0);
+        if (!pageFlip) return;
+        if (currentPage >= bookData.pages.length - 1) {
+          pageFlip.flip(0);
         } else {
-          flipNext();
+          pageFlip.flipNext();
         }
       }, 4500);
     }
   });
 
-  // 12. Âm thanh lật sách
+  // 8. Âm thanh lật sách
   function updateSoundIcon() {
     const isEnabled = window.flipSound.enabled;
     soundOnIcon.style.display = isEnabled ? 'block' : 'none';
@@ -418,7 +305,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 13. Toàn màn hình
+  // 9. Toàn màn hình
   btnFullscreen.addEventListener('click', () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(() => {});
@@ -427,7 +314,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 14. Sidebar drawers
+  // 10. Drawer Toggles (Mục lục & Thumbnails)
   btnToc.addEventListener('click', () => {
     const isOpen = tocDrawer.classList.toggle('open');
     btnToc.classList.toggle('active', isOpen);
@@ -451,7 +338,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 15. Google Drive Sync Modal
+  // 11. Google Drive Sync Modal
   btnDriveSync.addEventListener('click', () => {
     driveModal.classList.add('open');
   });
@@ -463,7 +350,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   btnConfirmSync.addEventListener('click', async () => {
     const url = driveApiUrlInput.value.trim();
     if (!url) {
-      alert('Vui lòng dán link Google Apps Script Web App của bạn!');
+      alert('Vui lòng dán liên kết Web App Google Apps Script của bạn!');
       return;
     }
 
@@ -475,7 +362,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const data = await res.json();
       if (data && data.pages && data.pages.length > 0) {
         localStorage.setItem('flipbook_drive_api', url);
-        initBook(data);
+        initFlipbook(data);
         driveModal.classList.remove('open');
         alert(`Đồng bộ thành công ${data.pages.length} trang sách từ Google Drive!`);
       } else {
@@ -493,23 +380,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     localStorage.removeItem('flipbook_drive_api');
     driveApiUrlInput.value = '';
     const localData = await loadBookData();
-    initBook(localData);
+    initFlipbook(localData);
     driveModal.classList.remove('open');
     alert('Đã khôi phục về danh sách ảnh bài học có sẵn trong máy!');
   });
 
-  // 16. Phím tắt bàn phím
+  // 12. Phím tắt bàn phím
   window.addEventListener('keydown', (e) => {
     if (document.activeElement.tagName === 'INPUT') return;
 
     if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
-      flipNext();
+      pageFlip && pageFlip.flipNext();
     } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-      flipPrev();
+      pageFlip && pageFlip.flipPrev();
     } else if (e.key === 'Home') {
-      jumpToPage(0);
+      pageFlip && pageFlip.flip(0);
     } else if (e.key === 'End') {
-      jumpToPage(bookData.pages.length - 1);
+      pageFlip && pageFlip.flip(bookData.pages.length - 1);
     } else if (e.key.toLowerCase() === 'm') {
       btnSound.click();
     } else if (e.key.toLowerCase() === 'f') {
@@ -524,22 +411,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Cử chỉ vuốt trên màn hình cảm ứng
-  let touchStartX = 0;
-  readerContainer.addEventListener('touchstart', (e) => {
-    touchStartX = e.changedTouches[0].screenX;
-  }, { passive: true });
-
-  readerContainer.addEventListener('touchend', (e) => {
-    const touchEndX = e.changedTouches[0].screenX;
-    const diff = touchEndX - touchStartX;
-    if (Math.abs(diff) > 45) {
-      if (diff < 0) flipNext(); // Vuốt sang trái -> xem trang tiếp theo
-      else flipPrev(); // Vuốt sang phải -> lùi lại trang trước
-    }
-  }, { passive: true });
-
-  // Mở khóa âm thanh khi người dùng tương tác lần đầu
+  // Mở khóa âm thanh khi người dùng bấm chuột lần đầu
   const unlockAudio = () => {
     window.flipSound.init();
     window.removeEventListener('click', unlockAudio);
@@ -548,8 +420,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('click', unlockAudio);
   window.addEventListener('touchstart', unlockAudio);
 
-  // Khởi chạy ứng dụng
+  window.addEventListener('resize', () => {
+    if (pageFlip) pageFlip.update();
+  });
+
+  // Khởi động
   updateSoundIcon();
   const initialData = await loadBookData();
-  initBook(initialData);
+  initFlipbook(initialData);
 });
