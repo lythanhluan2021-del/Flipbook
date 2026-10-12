@@ -51,12 +51,18 @@
 
   <!-- Reader Container -->
   <main class="reader-container" id="readerContainer">
+    <!-- Floating Zoom HUD -->
+    <div class="zoom-hud" id="zoomHud">
+      <span id="zoomHudText">🔍 Đang phóng to 200% • Kéo chuột để di chuyển • Nhấp đúp để thu nhỏ</span>
+      <button id="btnResetZoomHud">Thu nhỏ</button>
+    </div>
+
     <!-- Nút điều hướng mũi tên bên trái/phải -->
     <button class="nav-arrow prev" id="arrowPrev" title="Trang trước (Phím mũi tên trái)">
       <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
     </button>
 
-    <!-- Flipbook Stage (Canvas Page-Flip ban đầu) -->
+    <!-- Flipbook Stage (Canvas Page-Flip) -->
     <div class="flipbook-stage" id="flipbookStage">
       <div id="flipbook"></div>
     </div>
@@ -172,7 +178,7 @@
     </div>
   </div>
 
-  <!-- Thư viện PageFlip ban đầu & Audio & Logic -->
+  <!-- Thư viện PageFlip & Audio & Logic -->
   <script src="lib/page-flip.browser.js"></script>
   <script src="sound.js"></script>
   <script src="app.js"></script>
