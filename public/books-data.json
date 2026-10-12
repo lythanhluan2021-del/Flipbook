@@ -1,0 +1,55 @@
+{
+  "bookTitle": "TIN HỌC ỨNG DỤNG 12 - KẾT NỐI TRI THỨC",
+  "subtitle": "Tài liệu tóm tắt bài học & sơ đồ trực quan",
+  "totalPages": 8,
+  "pages": [
+    {
+      "pageNumber": 1,
+      "title": "Bài 1: Làm quen với trí tuệ nhân tạo",
+      "image": "images/page-01.png",
+      "thumbnail": "images/page-01.png"
+    },
+    {
+      "pageNumber": 2,
+      "title": "Bài 2: Trí tuệ nhân tạo trong đời sống",
+      "image": "images/page-02.png",
+      "thumbnail": "images/page-02.png"
+    },
+    {
+      "pageNumber": 3,
+      "title": "Bài 3: Một số thiết bị mạng thông dụng",
+      "image": "images/page-03.png",
+      "thumbnail": "images/page-03.png"
+    },
+    {
+      "pageNumber": 4,
+      "title": "Bài 4: Giao thức mạng",
+      "image": "images/page-04.png",
+      "thumbnail": "images/page-04.png"
+    },
+    {
+      "pageNumber": 5,
+      "title": "Bài 5 (Phần 1): Chia sẻ tài nguyên mạng Windows",
+      "image": "images/page-05.png",
+      "thumbnail": "images/page-05.png"
+    },
+    {
+      "pageNumber": 6,
+      "title": "Bài 5 (Phần 2): Chia sẻ tài nguyên trên mạng",
+      "image": "images/page-06.png",
+      "thumbnail": "images/page-06.png"
+    },
+    {
+      "pageNumber": 7,
+      "title": "Bài 6: Giao tiếp và ứng xử trên mạng",
+      "image": "images/page-07.png",
+      "thumbnail": "images/page-07.png"
+    },
+    {
+      "pageNumber": 8,
+      "title": "Bài 7: HTML và cấu trúc trang web",
+      "image": "images/page-08.png",
+      "thumbnail": "images/page-08.png"
+    }
+  ]
+}
